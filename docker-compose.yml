@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: destyl-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - ./redis_data:/data
+      - ./config/redis.conf:/usr/local/etc/redis/redis.conf
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    
+    # 🔥 THE FIX: We load the config file first, then FORCE the password 
+    # using the --requirepass flag. This guarantees Auth is enabled.
+    command: >
+      redis-server /usr/local/etc/redis/redis.conf
+      --requirepass "${REDIS_PASSWORD}"
+    
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - redis-net
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+
+networks:
+  redis-net:
+    driver: bridge
