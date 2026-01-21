@@ -1,355 +1,306 @@
-# Destyl Redis Infra (Production-Ready)
+<!-- Destyl Redis Infra (Production) -->
 
-This repository provides a **production-grade Redis deployment** using **Docker Compose**, featuring:
-
-- 🔒 Password protection (`requirepass`)
-- 💾 Persistent storage (AOF + RDB)
-- 🛡️ Safe Redis config for queues & caching
-- 🚀 Easy migration to any VM (Azure / AWS / DigitalOcean)
+Production-ready Redis deployment using **Docker Compose** with:
+- Password authentication (`requirepass`)
+- Persistent storage
+- Safe Redis config (AOF + RDB)
+- Easy migration to any VM (Azure / AWS / DigitalOcean)
 
 ---
 
-## 1️⃣ Repository Structure
+## 1) Server Requirements
 
+Recommended VM:
+- Ubuntu 22.04 LTS
+- 1 vCPU minimum (2 vCPU better)
+- 2GB RAM minimum
+- 20GB disk minimum
+
+---
+
+## 2) VM Setup (Ubuntu 22.04)
+
+### 2.1 Update server
+```bash
+sudo apt update && sudo apt upgrade -y
 ```
-destyl-redis-infra/
-├── config/
-│   └── redis.conf
-├── docker-compose.yml
-├── .env.example
-└── README.md
+
+### 2.2 Install Docker
+```bash
+sudo apt install -y docker.io
+sudo systemctl enable --now docker
+```
+
+### 2.3 Install Docker Compose (Plugin)
+```bash
+sudo apt install -y docker-compose-plugin
+```
+
+**Verify:**
+```bash
+docker --version
+docker compose version
+```
+If docker-compose-plugin is not available on your VM, use:
+```bash
+sudo apt install -y docker-compose
 ```
 
 ---
 
-## 2️⃣ Prerequisites
-
-### Local Machine
-- Docker installed
-- Docker Compose installed
-
-### VM Server (Ubuntu 22.04 Recommended)
-- Public IP available
-- Port allowed in Firewall/NSG (see below)
+## 3) Clone Repo on VM
+```bash
+cd ~
+git clone <YOUR_REPO_URL> Redis-Infra
+cd Redis-Infra
+```
 
 ---
 
-## 3️⃣ Environment Variables
+## 4) Create .env (DO NOT COMMIT)
 
-Create a `.env` file in the root directory:
-
+Create `.env`:
 ```bash
 nano .env
 ```
 
 Example `.env`:
-
 ```
 REDIS_PORT=6380
-REDIS_PASSWORD=YOUR_SECURE_PASSWORD
-```
-
-Generate a secure password:
-
-```bash
-openssl rand -hex 32
-```
-
----
-
-## 4️⃣ Docker Compose (How it Works)
-
-- Redis runs inside the container on port **6379**
-- Host exposes it on port **6380** (or your chosen port)
-
-**Port Mapping:**
-
-```
-HOST:6380  --->  CONTAINER:6379
-```
-
----
-
-## 5️⃣ Run Redis Locally (Testing)
-
-Start Redis:
-
-```bash
-docker compose up -d
-```
-
-Check container:
-
-```bash
-docker ps
-```
-
-Test Redis locally:
-
-```bash
-redis-cli -h 127.0.0.1 -p 6380 -a "YOUR_SECURE_PASSWORD" ping
-```
-
-Expected output:
-
-```
-PONG
-```
-
-Stop Redis:
-
-```bash
-docker compose down
-```
-
----
-
-## 🚀 Deploy Redis on a VM (Production)
-
-Follow these steps to deploy Redis on a fresh Ubuntu VM.
-
-### Step 1: SSH into VM
-
-```bash
-ssh ubuntu@YOUR_VM_PUBLIC_IP
-# Or using Azure Cloud Shell:
-az ssh vm --resource-group YOUR_RG --vm-name YOUR_VM_NAME
-```
-
-### Step 2: Install Docker (Ubuntu 22.04)
-
-```bash
-sudo apt update -y
-sudo apt install -y docker.io
-sudo systemctl enable --now docker
-```
-
-Verify installation:
-
-```bash
-docker --version
-sudo systemctl status docker --no-pager
-```
-
-### Step 3: Install Docker Compose
-
-**Option A (Recommended): Compose Plugin**
-
-```bash
-sudo apt install -y docker-compose-plugin
-docker compose version
-```
-
-**Option B (Legacy):**
-
-```bash
-sudo apt install -y docker-compose
-docker-compose --version
-```
-
-> ⚠️ If your server installs `podman-docker` by mistake, remove it and use Docker only.
-
-### Step 4: Clone the Repo
-
-```bash
-git clone YOUR_GITHUB_REPO_URL
-cd destyl-redis-infra
-```
-
-### Step 5: Create .env
-
-```bash
-nano .env
-```
-
-Paste and update:
-
-```
-REDIS_PORT=6380
-REDIS_PASSWORD=CHANGE_THIS_PASSWORD
+REDIS_PASSWORD=CHANGE_ME_STRONG_PASSWORD
 ```
 
 Generate a strong password:
-
 ```bash
 openssl rand -hex 32
 ```
 
-### Step 6: Start Redis on VM
+---
 
+## 5) Deploy Redis
+
+### 5.1 Start Redis container
 ```bash
 sudo docker compose up -d
+```
+
+Check container:
+```bash
 sudo docker ps
 ```
 
-Expected:
-
-```
-Container running
-Port mapped like: 0.0.0.0:6380->6379/tcp
-```
-
-### Step 7: Verify Redis on VM
-
+Check logs:
 ```bash
-redis-cli -h 127.0.0.1 -p 6380 -a "YOUR_PASSWORD" ping
+sudo docker logs -n 100 destyl-redis
 ```
 
-Expected:
+---
 
+## 6) Test Redis on VM (Local Test)
+
+Run:
+```bash
+redis-cli -h 127.0.0.1 -p 6380 -a "<YOUR_PASSWORD>" ping
+```
+Expected output:
 ```
 PONG
 ```
 
 ---
 
-## 🌍 Allow External Access (Important)
+## 7) Make Redis Accessible From Outside (Production)
 
-If your backend is on another server, it must connect using the VM Public IP.
-
-### 1) Azure NSG Rule (Required)
+### 7.1 Azure NSG (Required)
 
 In Azure Portal:
+- VM → Networking → Add inbound port rule
+- Allow: TCP 6380
+- Source: Your Backend VM Public IP (recommended)
+- Destination: Any
+- Action: Allow
 
-- VM → Networking → Inbound port rules → Add inbound rule
-	- Source: IP Addresses (recommended)
-	- Source IP: your backend server public IP
-	- Source port ranges: *
-	- Destination: Any
-	- Service: Custom
-	- Destination port ranges: 6380
-	- Protocol: TCP
-	- Action: Allow
-	- Priority: 310 (or any safe priority)
-	- Name: redis_port_development
+⚠️ **Do NOT keep Redis open to the world in production.**
+Always restrict to only your backend server IP.
 
-### 2) Ubuntu Firewall (UFW)
+---
 
-Check status:
+## 8) Verify Redis is Listening on Public Port
 
-```bash
-sudo ufw status
-```
-
-If UFW is active, allow Redis port:
-
-```bash
-sudo ufw allow 6380/tcp
-```
-
-### 3) Confirm Redis is Listening
-
+On Redis VM:
 ```bash
 sudo ss -lntp | grep 6380
 ```
-
 Expected:
-
 ```
-LISTEN 0 4096 0.0.0.0:6380 ...
-```
-
----
-
-## 🔗 Redis Connection URL (Use in Backend)
-
-Format:
-
-```
-redis://:<PASSWORD>@<HOST>:<PORT>
-```
-
-Example:
-
-```
-REDIS_URL=redis://:YOUR_PASSWORD@4.230.84.164:6380
+LISTEN ... 0.0.0.0:6380 ...
 ```
 
 ---
 
-## 🧪 Test From Another Server (Backend VM / Local)
+## 9) Test Redis From Backend Server (Important)
 
-From your backend machine:
+Login to backend VM and test connectivity:
 
+### 9.1 Check port open
 ```bash
-redis-cli -h 4.230.84.164 -p 6380 -a "YOUR_PASSWORD" ping
+nc -vz <REDIS_VM_PUBLIC_IP> 6380
+```
+Expected:
+```
+succeeded
 ```
 
+### 9.2 Test Redis ping
+```bash
+redis-cli -h <REDIS_VM_PUBLIC_IP> -p 6380 -a "<YOUR_PASSWORD>" ping
+```
 Expected:
-
 ```
 PONG
 ```
 
-> If it hangs, check NSG inbound rule or firewall settings.
+---
+
+## 10) Redis Connection URL (Use in Backend)
+
+Your Redis URL format:
+```
+redis://:<PASSWORD>@<REDIS_VM_PUBLIC_IP>:6380
+```
+Example:
+```
+REDIS_URL=redis://:yourStrongPassword@4.230.84.164:6380
+```
 
 ---
 
-## 🔒 Production Security Best Practices
+## 11) Restart / Stop / Update Commands
 
-**Recommended:**
-
-- Keep Redis on a separate VM
-- Only allow port 6380 from:
-	- Backend server IP
-	- Worker server IP
-- Never expose Redis to the public internet (0.0.0.0/0)
-- Always use a strong password (`requirepass`)
-- Keep AOF enabled for queue safety
-
----
-
-## 📌 Useful Commands
-
-**Logs:**
-
-```bash
-sudo docker logs -f destyl-redis
-```
-
-**Restart:**
-
-```bash
-sudo docker restart destyl-redis
-```
-
-**Stop:**
-
+**Stop Redis:**
 ```bash
 sudo docker compose down
 ```
 
-**Update (pull new config):**
-
+**Start Redis:**
 ```bash
-git pull
-sudo docker compose up -d --build
+sudo docker compose up -d
+```
+
+**Restart Redis:**
+```bash
+sudo docker compose restart
+```
+
+**View logs:**
+```bash
+sudo docker logs -f destyl-redis
 ```
 
 ---
 
-## ✅ Monitoring (Basic)
+## 12) Backup & Migration (Move Redis to New Server)
 
-**Live Redis Stats:**
+### 12.1 On old server (Redis VM)
 
+Stop Redis cleanly:
 ```bash
-redis-cli -h 127.0.0.1 -p 6380 -a "YOUR_PASSWORD" info
+sudo docker compose down
 ```
 
-**Connected Clients:**
-
+Backup persistent data folder:
 ```bash
-redis-cli -h 127.0.0.1 -p 6380 -a "YOUR_PASSWORD" client list
+tar -czvf redis_backup.tar.gz redis_data
 ```
 
-**Memory Usage:**
-
+Copy backup to new server:
 ```bash
-redis-cli -h 127.0.0.1 -p 6380 -a "YOUR_PASSWORD" info memory
+scp redis_backup.tar.gz <USER>@<NEW_SERVER_IP>:~
+```
+
+### 12.2 On new server
+
+Extract backup:
+```bash
+tar -xzvf redis_backup.tar.gz
+```
+
+Place it inside repo:
+```bash
+mv redis_data ~/Redis-Infra/
+```
+
+Deploy again:
+```bash
+cd ~/Redis-Infra
+sudo docker compose up -d
 ```
 
 ---
 
-## 📝 License
+## 13) Security Notes (Production Best Practice)
 
-MIT
+- Always use a strong password (`REDIS_PASSWORD`)
+- Restrict port 6380 to only your backend server IP (NSG rule)
+- Do NOT expose Redis to the public internet
+- Keep Docker + OS updated regularly
+
+---
+
+## 14) Troubleshooting
+
+**Problem: Port already in use**
+
+Error:
+```
+address already in use
+```
+
+Fix: change host port in `.env`:
+```
+REDIS_PORT=6380
+```
+Then:
+```bash
+sudo docker compose down
+sudo docker compose up -d
+```
+
+**Problem: Connection timeout from backend**
+
+Cause:
+- Azure NSG not allowing 6380
+- Wrong IP used
+- Redis not running
+
+Fix:
+```bash
+sudo docker ps
+sudo ss -lntp | grep 6380
+```
+Test from backend:
+```bash
+nc -vz <REDIS_VM_PUBLIC_IP> 6380
+```
+
+---
+
+## 15) Quick Deploy Summary (Copy-Paste)
+
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y docker.io docker-compose-plugin
+sudo systemctl enable --now docker
+
+cd ~
+git clone <YOUR_REPO_URL> Redis-Infra
+cd Redis-Infra
+
+openssl rand -hex 32
+nano .env
+
+sudo docker compose up -d
+sudo docker ps
+
+redis-cli -h 127.0.0.1 -p 6380 -a "<YOUR_PASSWORD>" ping
+```
